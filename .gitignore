@@ -1,0 +1,30 @@
+# Go build artifacts
+/gifcodecfl
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace/cache
+bin/
+pkg/
+.coverprofile
+coverage.out
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs and temp files
+*.log
+tmp/
+
+# Editor/OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
