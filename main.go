@@ -8,16 +8,19 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	defaultListenAddr = ":8080"
-	redeemURL         = "https://vgrapi-sea.vnggames.com/coordinator/api/v1/code/redeem"
-	fixedProfileID    = ""
-	fixedServerID     = "101"
-	fixedGameCode     = "A49"
+	defaultListenAddr    = ":8386"
+	redeemURL            = "https://vgrapi-sea.vnggames.com/coordinator/api/v1/code/redeem"
+	fixedProfileID       = ""
+	fixedServerID        = "101"
+	fixedGameCode        = "A49"
+	maxConcurrentRedeems = 10
 )
 
 type server struct {
@@ -26,8 +29,7 @@ type server struct {
 }
 
 type config struct {
-	Authorization string
-	ClientRegion  string
+	ClientRegion string
 }
 
 type redeemRequest struct {
@@ -55,13 +57,10 @@ type redeemResponse struct {
 }
 
 func main() {
-	cfg := config{
-		Authorization: strings.TrimSpace(os.Getenv("REDEEM_AUTHORIZATION")),
-		ClientRegion:  fallback(strings.TrimSpace(os.Getenv("REDEEM_CLIENT_REGION")), "VN"),
-	}
+	runtime.GOMAXPROCS(2)
 
-	if cfg.Authorization == "" {
-		log.Println("warning: REDEEM_AUTHORIZATION is empty, redeem requests will fail")
+	cfg := config{
+		ClientRegion: fallback(strings.TrimSpace(os.Getenv("REDEEM_CLIENT_REGION")), "VN"),
 	}
 
 	srv := &server{
@@ -108,13 +107,43 @@ func (s *server) handleRedeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := make([]redeemResult, 0, len(codes))
-	for _, code := range codes {
-		result := s.redeemOne(r.Context(), userID, code)
-		results = append(results, result)
-	}
+	results := s.redeemMany(r.Context(), userID, codes)
 
 	writeJSON(w, http.StatusOK, redeemResponse{UserID: userID, Results: results})
+}
+
+func (s *server) redeemMany(ctx context.Context, userID string, codes []string) []redeemResult {
+	results := make([]redeemResult, len(codes))
+	jobs := make(chan int)
+	workerCount := maxConcurrentRedeems
+	if len(codes) < workerCount {
+		workerCount = len(codes)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range jobs {
+				results[idx] = s.redeemOne(ctx, userID, codes[idx])
+			}
+		}()
+	}
+
+	for i := range codes {
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return results
+		case jobs <- i:
+		}
+	}
+
+	close(jobs)
+	wg.Wait()
+	return results
 }
 
 func (s *server) redeemOne(ctx context.Context, userID, code string) redeemResult {
@@ -139,7 +168,6 @@ func (s *server) redeemOne(ctx context.Context, userID, code string) redeemResul
 
 	req.Header.Set("accept", "application/json, text/plain, */*")
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("authorization", s.config.Authorization)
 	req.Header.Set("x-client-region", s.config.ClientRegion)
 
 	resp, err := s.httpClient.Do(req)

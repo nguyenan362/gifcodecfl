@@ -13,7 +13,7 @@ WORKDIR /app
 COPY --from=builder /out/server /app/server
 COPY web /app/web
 
-EXPOSE 8080
-ENV PORT=:8080
+EXPOSE 8386
+ENV PORT=:8386
 
 CMD ["/app/server"]

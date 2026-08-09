@@ -23,13 +23,7 @@ Web app đơn giản để nhập `userID` và nhiều gift code, sau đó gọi
 cp .env.example .env
 ```
 
-2. Điền token vào `.env`:
-
-```env
-REDEEM_AUTHORIZATION=...
-```
-
-3. Export biến môi trường và chạy:
+2. Export biến môi trường và chạy:
 
 ```bash
 set -a
@@ -39,10 +33,10 @@ set +a
 go run .
 ```
 
-4. Mở trình duyệt:
+3. Mở trình duyệt:
 
 ```text
-http://localhost:8080
+http://localhost:8386
 ```
 
 ## Chạy bằng Docker Compose
@@ -53,25 +47,19 @@ http://localhost:8080
 cp .env.example .env
 ```
 
-2. Cập nhật token trong `.env`:
-
-```env
-REDEEM_AUTHORIZATION=...
-```
-
-3. Build và chạy:
+2. Build và chạy:
 
 ```bash
 docker compose up -d --build
 ```
 
-4. Xem log:
+3. Xem log:
 
 ```bash
 docker compose logs -f app
 ```
 
-5. Dừng dịch vụ:
+4. Dừng dịch vụ:
 
 ```bash
 docker compose down
@@ -92,8 +80,3 @@ Request body:
 
 - `codes` hỗ trợ nhiều dòng, dấu phẩy hoặc dấu `;`
 - Tự loại bỏ code trùng nhau
-
-## Lưu ý bảo mật
-
-- Không đặt token `authorization` ở frontend.
-- Token chỉ nên lưu ở backend qua biến môi trường.
