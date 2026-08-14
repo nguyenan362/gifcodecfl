@@ -91,10 +91,11 @@ sudo bash deploy/native/install.sh
 Script se lan luot:
 
 1. Kiem tra/cai bien moi truong he thong.
-2. Hoi co muon cau hinh `.env` hay khong.
-3. Neu co, hoi `REDEEM_CLIENT_REGION` va `PORT`.
-4. Hoi co muon cau hinh Cloudflare Tunnel hay khong.
-5. Neu co, chay `cloudflared tunnel login`, hoi domain, tao DNS route va luu cau hinh.
+2. Kiem tra/cai Go neu may chua co san.
+3. Hoi co muon cau hinh `.env` hay khong.
+4. Neu co, hoi `REDEEM_CLIENT_REGION` va `PORT`.
+5. Hoi co muon cau hinh Cloudflare Tunnel hay khong.
+6. Neu co, chay `cloudflared tunnel login`, hoi domain, tao DNS route va luu cau hinh.
 
 Sau khi cai dat xong, goi menu bang:
 

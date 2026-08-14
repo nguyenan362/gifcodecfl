@@ -30,6 +30,7 @@ render_template() {
 }
 
 build_app() {
+  install_go
   ensure_binary go
   ensure_dir "${CFL_INSTALL_ROOT}"
   ensure_dir "${CFL_BIN_DIR}"

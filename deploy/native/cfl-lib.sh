@@ -210,6 +210,32 @@ ensure_binary() {
   command -v "$1" >/dev/null 2>&1 || fail "thieu lenh $1"
 }
 
+install_go() {
+  if command -v go >/dev/null 2>&1; then
+    return
+  fi
+
+  log "go chua duoc cai dat, dang tien hanh cai"
+
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y golang-go
+    return
+  fi
+
+  if command -v dnf >/dev/null 2>&1; then
+    dnf install -y golang
+    return
+  fi
+
+  if command -v yum >/dev/null 2>&1; then
+    yum install -y golang
+    return
+  fi
+
+  fail "khong tim thay trinh quan ly goi de cai Go"
+}
+
 install_cloudflared() {
   if command -v cloudflared >/dev/null 2>&1; then
     return
