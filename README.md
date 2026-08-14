@@ -65,6 +65,50 @@ docker compose logs -f app
 docker compose down
 ```
 
+## Deploy native Linux voi systemd
+
+Bo script native nam trong `deploy/native/` va duoc thiet ke cho may Linux chay `systemd`.
+
+### Chuc nang
+
+- Kiem tra va cai bo bien moi truong he thong can thiet trong `/etc/profile.d/cfl.sh`
+- Tao file env cho app tai `/etc/gifcodecfl/.env`
+- Build binary Go va copy static web vao `/opt/gifcodecfl`
+- Cai 2 service `systemd`:
+  - `gifcodecfl.service`
+  - `gifcodecfl-cloudflared.service`
+- Tao lenh menu `cfl` trong `/usr/local/bin/cfl`
+- Co the cau hinh Cloudflare Tunnel va luu domain expose
+
+### Cach dung
+
+Tren may Linux:
+
+```bash
+sudo bash deploy/native/install.sh
+```
+
+Script se lan luot:
+
+1. Kiem tra/cai bien moi truong he thong.
+2. Hoi co muon cau hinh `.env` hay khong.
+3. Neu co, hoi `REDEEM_CLIENT_REGION` va `PORT`.
+4. Hoi co muon cau hinh Cloudflare Tunnel hay khong.
+5. Neu co, chay `cloudflared tunnel login`, hoi domain, tao DNS route va luu cau hinh.
+
+Sau khi cai dat xong, goi menu bang:
+
+```bash
+sudo cfl
+```
+
+Menu gom 4 muc:
+
+- Khoi dong app
+- Cau hinh lai domain Cloudflare Tunnel
+- Check trang thai app
+- Thoat
+
 ## API nội bộ
 
 ### `POST /api/redeem`
