@@ -196,6 +196,10 @@ configure_env_interactive() {
   local port_value
   redeem_region="$(prompt_default "Nhap REDEEM_CLIENT_REGION" "${current_region}")"
   port_value="$(prompt_default "Nhap PORT" "${current_port}")"
+  port_value="$(normalize_port "${port_value}")"
+  if [[ "${port_value}" != :* ]]; then
+    port_value=":${port_value}"
+  fi
 
   cat > "${CFL_ENV_FILE}" <<EOF
 REDEEM_CLIENT_REGION=${redeem_region}
