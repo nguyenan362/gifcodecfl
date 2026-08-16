@@ -286,7 +286,9 @@ EOF
 
 extract_tunnel_id() {
   local tunnel_name="$1"
-  cloudflared tunnel info "${tunnel_name}" 2>/dev/null | awk -F ': ' '/^ID:/ {print $2; exit}'
+  local id
+  id="$(cloudflared tunnel info "${tunnel_name}" 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n1 || true)"
+  printf '%s' "${id}"
 }
 
 copy_cloudflared_materials() {
