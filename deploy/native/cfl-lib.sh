@@ -323,12 +323,29 @@ EOF
   chmod 0600 "${CFL_CLOUDFLARED_CONFIG}"
 }
 
+cloudflared_login() {
+  local source_home="${HOME:-/root}"
+  local source_cert="${source_home}/.cloudflared/cert.pem"
+
+  if [[ -f "${source_cert}" ]]; then
+    log "phat hien cert da ton tai tai ${source_cert}"
+    if prompt_yes_no "Ban co muon xac thuc lai (se ghi de cert cu) khong?" "n"; then
+      rm -f "${source_cert}"
+      cloudflared tunnel login
+    else
+      log "giu nguyen cert hien tai, bo qua xac thuc lai"
+    fi
+  else
+    cloudflared tunnel login
+  fi
+}
+
 configure_cloudflare_tunnel() {
   install_cloudflared
   ensure_dir "${CFL_CLOUDFLARED_DIR}"
 
   log "bat dau xac thuc Cloudflare Tunnel"
-  cloudflared tunnel login
+  cloudflared_login
 
   local domain_default
   local domain
