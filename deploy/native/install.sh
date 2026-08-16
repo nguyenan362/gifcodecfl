@@ -37,7 +37,7 @@ build_app() {
   log "build binary Go"
   (
     cd "${REPO_ROOT}"
-    CGO_ENABLED=0 go build -o "${CFL_INSTALL_ROOT}/server" .
+    CGO_ENABLED=0 go build -buildvcs=false -o "${CFL_INSTALL_ROOT}/server" .
   )
 
   rm -rf "${CFL_INSTALL_ROOT}/web"
