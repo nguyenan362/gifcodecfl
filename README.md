@@ -90,12 +90,11 @@ sudo bash deploy/native/install.sh
 
 Script se lan luot:
 
-1. Kiem tra/cai bien moi truong he thong.
-2. Kiem tra/cai Go neu may chua co san.
-3. Hoi co muon cau hinh `.env` hay khong.
-4. Neu co, hoi `REDEEM_CLIENT_REGION` va `PORT`.
-5. Hoi co muon cau hinh Cloudflare Tunnel hay khong.
-6. Neu co, chay `cloudflared tunnel login`, hoi domain, tao DNS route va luu cau hinh.
+1. Kiem tra/cai bo bien moi truong he thong can thiet.
+2. Hoi co muon setup Cloudflare Tunnel de chay voi domain web hay khong.
+3. Neu co, cai `cloudflared`, chay `cloudflared tunnel login` de nguoi dung xac thuc, hoi domain, tao tunnel + DNS route va luu credential file.
+4. Hoi cac thiet lap trong `.env` (`REDEEM_CLIENT_REGION`, `PORT`) de thiet lap nhanh.
+5. Build binary Go, copy static web va setup chay native `systemd`.
 
 Sau khi cai dat xong, goi menu bang:
 
@@ -105,10 +104,10 @@ sudo cfl
 
 Menu gom 4 muc:
 
-- Khoi dong app
-- Cau hinh lai domain Cloudflare Tunnel
-- Check trang thai app
-- Thoat
+1. Kiem tra trang thai hoat dong cua app
+2. Bat/Tat chay app
+3. Cau hinh lai hoac go bo Cloudflare Tunnel
+4. Thoat
 
 ## API nội bộ
 
