@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # deploy/termux/termux-bootstrap.sh
 # Entry point nhe de pipe tu curl:
-#   curl -fsSL https://raw.githubusercontent.com/AN/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash
 # Script nay chi dam bao Termux + curl + git co san, clone repo roi ban giao
 # cho install.sh de thuc hien build/start.
 set -euo pipefail
@@ -32,7 +32,7 @@ fi
 
 # --- Bien --------------------------------------------------------------------
 APP_HOME="${CFL_APP_HOME:-${HOME}/gifcodecfl}"
-APP_REPO="${CFL_REPO_URL:-https://github.com/AN/gifcodecfl.git}"
+APP_REPO="${CFL_REPO_URL:-https://github.com/nguyenan362/gifcodecfl.git}"
 APP_REPO_BRANCH="${CFL_REPO_BRANCH:-main}"
 
 # --- Cap nhat repo list va goi can thiet -------------------------------------

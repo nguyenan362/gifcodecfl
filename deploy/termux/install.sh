@@ -14,7 +14,7 @@ set -euo pipefail
 
 APP_NAME="gifcodecfl"
 GO_MIN_VERSION="1.22"
-APP_REPO_DEFAULT="https://github.com/AN/gifcodecfl.git"
+APP_REPO_DEFAULT="https://github.com/nguyenan362/gifcodecfl.git"
 APP_REPO_BRANCH_DEFAULT="main"
 SERVICE_NAME="gifcodecfl"
 BASHRC_MARKER="gifcodecfl-runsvdir"

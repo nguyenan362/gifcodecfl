@@ -6,8 +6,8 @@ Web app đơn giản để nhập `userID` và nhiều gift code, sau đó gọi
 
 | Nền tảng | Câu lệnh |
 | --- | --- |
-| **Termux (Android)** | `curl -fsSL https://raw.githubusercontent.com/AN/gifcodecfl/main/deploy/termux/termux-bootstrap.sh \| bash` |
-| **Linux (systemd)** | `curl -fsSL https://raw.githubusercontent.com/AN/gifcodecfl/main/deploy/native/install.sh -o install.sh && sudo bash install.sh` |
+| **Termux (Android)** | `curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/termux/termux-bootstrap.sh \| bash` |
+| **Linux (systemd)** | `curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/native/install.sh -o install.sh && sudo bash install.sh` |
 | **Docker** | `cp .env.example .env && docker compose up -d --build` |
 
 Bản Termux tự cài `golang` + `termux-services` (runit), clone repo, build binary, **enable runit service (auto-start + auto-restart)** và in sẵn địa chỉ truy cập (kèm IP nội bộ).
@@ -82,7 +82,7 @@ App chạy trực tiếp trên điện thoại Android thông qua [Termux](https
 ### Một lệnh duy nhất
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AN/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash
 ```
 
 Script `termux-bootstrap.sh` sẽ tự động:
@@ -154,7 +154,7 @@ Hoặc chạy menu tương tác:
   CFL_REPO_URL=https://github.com/<owner>/gifcodecfl.git \
   CFL_REPO_BRANCH=main \
   CFL_APP_HOME=$HOME/gifcodecfl \
-  curl -fsSL https://raw.githubusercontent.com/AN/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash
   ```
 
 ## Deploy native Linux voi systemd
