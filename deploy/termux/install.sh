@@ -19,6 +19,9 @@ APP_REPO_BRANCH_DEFAULT="main"
 SERVICE_NAME="gifcodecfl"
 BASHRC_MARKER="gifcodecfl-runsvdir"
 
+# Default PREFIX cho truong hop chay help ngoai Termux (set -u)
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+
 # --- Resolve duong dan -------------------------------------------------------
 SCRIPT_SRC="${BASH_SOURCE[0]:-$0}"
 if command -v readlink >/dev/null 2>&1; then
@@ -49,6 +52,31 @@ warn() { printf "%s[cfl]%s %s\n" "${YLW}" "${RST}" "$*"; }
 err()  { printf "%s[cfl]%s %s\n" "${RED}" "${RST}" "$*" >&2; }
 ok()   { printf "%s[cfl]%s %s\n" "${GRN}" "${RST}" "$*"; }
 die()  { err "$*"; exit 1; }
+
+prompt_yes_no() {
+  local message="$1" default="${2:-y}" choice="" suffix="[Y/n]"
+  if [[ "${default}" == "n" ]]; then suffix="[y/N]"; fi
+  while true; do
+    read -r -p "${message} ${suffix}: " choice
+    choice="${choice:-${default}}"
+    case "${choice}" in
+      y|Y|yes|YES) return 0 ;;
+      n|N|no|NO)   return 1 ;;
+    esac
+    warn "chi nhap y hoac n"
+  done
+}
+
+prompt_default() {
+  local message="$1" default_value="${2:-}" answer=""
+  if [[ -n "${default_value}" ]]; then
+    read -r -p "${message} [${default_value}]: " answer
+    printf '%s' "${answer:-${default_value}}"
+    return
+  fi
+  read -r -p "${message}: " answer
+  printf '%s' "${answer}"
+}
 
 # --- Kiem tra moi truong -----------------------------------------------------
 require_termux() {
@@ -96,7 +124,7 @@ ensure_termux_services() {
 
 # --- Service (runit) helpers -------------------------------------------------
 is_service_enabled() {
-  [[ -e "${SERVICE_ACTIVE_DIR}" ]]
+  [[ -e "${SERVICE_ACTIVE_DIR}" ]] || [[ -L "${PREFIX}/var/service/${SERVICE_NAME}" ]]
 }
 
 is_service_installed() {
@@ -143,19 +171,19 @@ ensure_bashrc_runsvdir() {
 if [ -z "\${RUNSVDIR:-}" ] && [ -x "\$PREFIX/bin/runsvdir" ]; then
   export RUNSVDIR="\$PREFIX/var/service"
   export SVDIR="\$PREFIX/etc/sv"
-  runsvdir "\${SVDIR}" >/dev/null 2>&1 &
+  runsvdir "\${RUNSVDIR}" >/dev/null 2>&1 &
   disown
 fi
 EOF
 }
 
 start_runsvdir_now() {
-  if ! pgrep -f "runsvdir .*\$PREFIX/etc/sv" >/dev/null 2>&1; then
+  if ! pgrep -f "runsvdir .*\$PREFIX/(var/service|etc/sv)" >/dev/null 2>&1; then
     log "khoi dong runsvdir cho session hien tai"
     (
       export RUNSVDIR="${PREFIX}/var/service"
       export SVDIR="${PREFIX}/etc/sv"
-      nohup runsvdir "${PREFIX}/etc/sv" >/dev/null 2>&1 &
+      nohup runsvdir "${PREFIX}/var/service" >/dev/null 2>&1 &
       disown || true
     )
   fi
@@ -166,18 +194,34 @@ install_service() {
   ensure_bashrc_runsvdir
   start_runsvdir_now
 
-  if ! is_service_enabled; then
-    log "enable service (sv-enable ${SERVICE_NAME})"
-    if command -v sv-enable >/dev/null 2>&1; then
-      sv-enable "${SERVICE_NAME}"
-    else
-      ensure_dir "$(dirname "${SERVICE_ACTIVE_DIR}")"
-      ln -sf "../sv/${SERVICE_NAME}" "${SERVICE_ACTIVE_DIR}"
-    fi
-  else
+  if is_service_enabled; then
     log "service da duoc enable san"
+    ok "service da san sang (runit se start khi mo Termux)"
+    return 0
   fi
-  ok "service da san sang (runit se start khi mo Termux)"
+
+  log "enable service"
+  local enable_ok=1
+  if command -v sv-enable >/dev/null 2>&1; then
+    if sv-enable "${SERVICE_NAME}" 2>/dev/null; then
+      enable_ok=0
+    else
+      warn "sv-enable that bai, thu manual"
+    fi
+  fi
+  if [[ "${enable_ok}" -ne 0 ]]; then
+    # Manual fallback: tao symlink $PREFIX/var/service/<name> -> ../sv/<name>
+    ensure_dir "${PREFIX}/var/service"
+    ln -sfn "../sv/${SERVICE_NAME}" "${PREFIX}/var/service/${SERVICE_NAME}" \
+      || die "khong tao duoc symlink trong ${PREFIX}/var/service/"
+  fi
+
+  if is_service_enabled; then
+    ok "service da san sang (runit se start khi mo Termux)"
+  else
+    err "service khong duoc enable. Kiem tra $PREFIX/var/service/ va $PREFIX/etc/sv/"
+    return 1
+  fi
 }
 
 uninstall_service() {
@@ -185,9 +229,10 @@ uninstall_service() {
     log "stop + disable service"
     sv down "${SERVICE_NAME}" 2>/dev/null || true
     if command -v sv-disable >/dev/null 2>&1; then
-      sv-disable "${SERVICE_NAME}" 2>/dev/null || rm -f "${SERVICE_ACTIVE_DIR}"
+      sv-disable "${SERVICE_NAME}" 2>/dev/null || \
+        rm -f "${SERVICE_ACTIVE_DIR}" "${PREFIX}/var/service/${SERVICE_NAME}"
     else
-      rm -f "${SERVICE_ACTIVE_DIR}"
+      rm -f "${SERVICE_ACTIVE_DIR}" "${PREFIX}/var/service/${SERVICE_NAME}"
     fi
   fi
   if [[ -d "${SERVICE_DIR}" ]]; then
@@ -511,6 +556,316 @@ uninstall_app() {
   ok "da go bo"
 }
 
+# --- Cloudflare Tunnel -------------------------------------------------------
+# Bien moi truong noi bo cho tunnel
+TUNNEL_NAME="${SERVICE_NAME}"
+TUNNEL_BIN="${PREFIX}/bin/cloudflared"
+TUNNEL_CF_DIR="${PREFIX}/etc/cloudflared"
+TUNNEL_CFG="${TUNNEL_CF_DIR}/config.yml"
+TUNNEL_STATE="${PREFIX}/etc/gifcodecfl/tunnel.env"
+TUNNEL_SV_DIR="${PREFIX}/etc/sv/${SERVICE_NAME}-tunnel"
+TUNNEL_SV_ACTIVE="${PREFIX}/etc/service/${SERVICE_NAME}-tunnel"
+TUNNEL_LOG="${APP_HOME}/tunnel.log"
+CERT_SRC_DEFAULT="${HOME}/.cloudflared/cert.pem"
+CERT_DST="${TUNNEL_CF_DIR}/cert.pem"
+
+detect_termux_arch() {
+  case "$(uname -m)" in
+    aarch64|arm64)   echo "arm64" ;;
+    armv7l|armv7|armhf) echo "arm" ;;
+    x86_64|amd64)    echo "amd64" ;;
+    i386|i686)       echo "386" ;;
+    *) return 1 ;;
+  esac
+}
+
+install_cloudflared_binary() {
+  local arch url
+  if ! command -v curl >/dev/null 2>&1; then
+    die "can curl de tai cloudflared"
+  fi
+  arch="$(detect_termux_arch)" || die "khong ho tro kien truc: $(uname -m)"
+  url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${arch}"
+  log "tai cloudflared (${arch}) -> ${TUNNEL_BIN}"
+  if ! curl -fsSL --retry 3 -o "${TUNNEL_BIN}" "${url}"; then
+    die "tai cloudflared that bai. Kiem tra internet hoac truy cap: ${url}"
+  fi
+  chmod +x "${TUNNEL_BIN}"
+  ok "cloudflared: $("${TUNNEL_BIN}" --version 2>&1 | head -1)"
+}
+
+ensure_cloudflared() {
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    install_cloudflared_binary
+  fi
+}
+
+read_tunnel_state() {
+  [[ -f "${TUNNEL_STATE}" ]] || return 1
+  # shellcheck disable=SC1090
+  . "${TUNNEL_STATE}"
+  [[ -n "${CFL_TUNNEL_ID:-}" && -n "${CFL_TUNNEL_DOMAIN:-}" ]]
+}
+
+save_tunnel_state() {
+  local domain="$1" id="$2"
+  ensure_dir "$(dirname "${TUNNEL_STATE}")"
+  cat > "${TUNNEL_STATE}" <<EOF
+CFL_TUNNEL_DOMAIN=${domain}
+CFL_TUNNEL_NAME=${TUNNEL_NAME}
+CFL_TUNNEL_ID=${id}
+EOF
+  chmod 0640 "${TUNNEL_STATE}"
+}
+
+extract_tunnel_id() {
+  cloudflared tunnel info "${TUNNEL_NAME}" 2>/dev/null \
+    | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
+    | head -n1
+}
+
+cloudflared_login() {
+  if [[ -f "${CERT_SRC_DEFAULT}" || -f "${CERT_DST}" ]]; then
+    log "cert da ton tai, bo qua buoc login"
+    return 0
+  fi
+  log "==============================================================="
+  log "  Buoc tiep theo: cloudflared se in 1 URL."
+  log "  Copy URL do, mo trong browser tren bat ky thiet bi nao,"
+  log "  dang nhap Cloudflare, chon domain can dung, bam Authorize."
+  log "  Quay lai day va cho den khi script tiep tuc."
+  log "==============================================================="
+  cloudflared tunnel login
+  if [[ ! -f "${CERT_SRC_DEFAULT}" && ! -f "${CERT_DST}" ]]; then
+    die "khong thay cert.pem sau login. Kiem tra xem da authorize chua."
+  fi
+  ok "login thanh cong"
+}
+
+copy_cloudflared_materials() {
+  local id="$1"
+  ensure_dir "${TUNNEL_CF_DIR}"
+  if [[ -f "${CERT_SRC_DEFAULT}" && ! -f "${CERT_DST}" ]]; then
+    install -m 0600 "${CERT_SRC_DEFAULT}" "${CERT_DST}"
+  fi
+  if [[ ! -f "${CERT_SRC_DEFAULT}" && ! -f "${CERT_DST}" ]]; then
+    die "khong thay cert.pem (can chay 'tunnel-login' truoc)"
+  fi
+  local src_cred="${HOME}/.cloudflared/${id}.json"
+  local dst_cred="${TUNNEL_CF_DIR}/${id}.json"
+  if [[ ! -f "${src_cred}" ]]; then
+    die "khong thay credentials: ${src_cred} (can tao tunnel truoc)"
+  fi
+  install -m 0600 "${src_cred}" "${dst_cred}"
+  ok "da copy cert + credentials vao ${TUNNEL_CF_DIR}"
+}
+
+write_tunnel_config() {
+  local domain="$1" id="$2" app_port="$3"
+  ensure_dir "${TUNNEL_CF_DIR}"
+  cat > "${TUNNEL_CFG}" <<EOF
+tunnel: ${id}
+credentials-file: ${TUNNEL_CF_DIR}/${id}.json
+
+ingress:
+  - hostname: ${domain}
+    service: http://127.0.0.1:${app_port}
+  - service: http_status:404
+EOF
+  chmod 0600 "${TUNNEL_CFG}"
+}
+
+install_tunnel_service() {
+  ensure_termux_services
+  ensure_dir "${TUNNEL_SV_DIR}"
+  cat > "${TUNNEL_SV_DIR}/run" <<EOF
+#!/data/data/com.termux/files/usr/bin/sh
+# gifcodecfl cloudflare tunnel (runit service)
+exec 2>&1
+exec ${TUNNEL_BIN} tunnel --config ${TUNNEL_CFG} --no-autoupdate run
+EOF
+  chmod +x "${TUNNEL_SV_DIR}/run"
+
+  if [[ ! -e "${TUNNEL_SV_ACTIVE}" && ! -L "${PREFIX}/var/service/${SERVICE_NAME}-tunnel" ]]; then
+    local enable_ok=1
+    if command -v sv-enable >/dev/null 2>&1; then
+      if sv-enable "${SERVICE_NAME}-tunnel" 2>/dev/null; then
+        enable_ok=0
+      else
+        warn "sv-enable that bai, thu manual"
+      fi
+    fi
+    if [[ "${enable_ok}" -ne 0 ]]; then
+      ensure_dir "${PREFIX}/var/service"
+      ln -sfn "../sv/${SERVICE_NAME}-tunnel" \
+        "${PREFIX}/var/service/${SERVICE_NAME}-tunnel" \
+        || die "khong tao duoc symlink trong ${PREFIX}/var/service/"
+    fi
+  fi
+  ok "tunnel runit service da enable"
+}
+
+tunnel_service_running() {
+  command -v sv >/dev/null 2>&1 \
+    && sv status "${SERVICE_NAME}-tunnel" 2>/dev/null | grep -q "^run:"
+}
+
+tunnel_service_active() {
+  [[ -e "${TUNNEL_SV_ACTIVE}" ]] || [[ -L "${PREFIX}/var/service/${SERVICE_NAME}-tunnel" ]]
+}
+
+cmd_tunnel_setup() {
+  require_termux
+  ensure_cloudflared
+  cloudflared_login
+
+  local domain current_domain=""
+  if read_tunnel_state; then
+    current_domain="${CFL_TUNNEL_DOMAIN}"
+    warn "tunnel da cau hinh san (domain=${CFL_TUNNEL_DOMAIN})"
+    if ! prompt_yes_no "Cau hinh lai?" "n"; then
+      log "giu nguyen cau hinh cu. Dung 'tunnel-restart' neu can."
+      return 0
+    fi
+  fi
+  read -r -p "Nhap domain (vd: gifcodecfl.example.com): " domain
+  if [[ -z "${domain}" ]]; then
+    die "domain khong duoc de trong"
+  fi
+
+  log "tao tunnel '${TUNNEL_NAME}' (neu chua co)"
+  if ! cloudflared tunnel info "${TUNNEL_NAME}" >/dev/null 2>&1; then
+    cloudflared tunnel create "${TUNNEL_NAME}" || die "khong tao duoc tunnel. Kiem tra cert."
+  fi
+
+  local id
+  id="$(extract_tunnel_id)"
+  if [[ -z "${id}" ]]; then
+    die "khong lay duoc tunnel id tu cloudflared"
+  fi
+  ok "tunnel id: ${id}"
+
+  copy_cloudflared_materials "${id}"
+
+  local app_port
+  app_port="$(read_port)"
+  write_tunnel_config "${domain}" "${id}" "${app_port}"
+  save_tunnel_state "${domain}" "${id}"
+
+  log "gan DNS route ${domain} -> ${TUNNEL_NAME}"
+  cloudflared tunnel route dns "${TUNNEL_NAME}" "${domain}" \
+    || die "khong gan duoc DNS. Kiem tra domain da tro ve Cloudflare chua (them NS records)."
+
+  install_tunnel_service
+  sv up "${SERVICE_NAME}-tunnel" 2>/dev/null || true
+  sleep 1
+
+  if tunnel_service_running; then
+    ok "tunnel da san sang!"
+    log "truy cap: https://${domain}"
+    log "quan ly: $0 tunnel-status | tunnel-stop | tunnel-start | tunnel-remove"
+  else
+    warn "tunnel service chua len. Xem log:"
+    tail -n 30 "${TUNNEL_LOG}" 2>/dev/null || true
+  fi
+}
+
+cmd_tunnel_login() {
+  require_termux
+  ensure_cloudflared
+  cloudflared_login
+}
+
+cmd_tunnel_start() {
+  require_termux
+  if ! tunnel_service_active; then
+    if read_tunnel_state; then
+      install_tunnel_service
+    else
+      die "chua cau hinh tunnel. Chay: $0 tunnel-setup"
+    fi
+  fi
+  sv up "${SERVICE_NAME}-tunnel" 2>/dev/null || true
+  sleep 1
+  if tunnel_service_running; then
+    if read_tunnel_state; then
+      ok "tunnel dang chay: https://${CFL_TUNNEL_DOMAIN}"
+    else
+      ok "tunnel dang chay"
+    fi
+  else
+    err "tunnel chua len. Log: ${TUNNEL_LOG}"
+  fi
+}
+
+cmd_tunnel_stop() {
+  require_termux
+  sv down "${SERVICE_NAME}-tunnel" 2>/dev/null || true
+  for _ in 1 2 3 4 5; do
+    tunnel_service_running || break
+    sleep 1
+  done
+  if tunnel_service_running; then
+    err "tunnel van chay"
+    return 1
+  fi
+  ok "tunnel da dung"
+}
+
+cmd_tunnel_status() {
+  require_termux
+  if read_tunnel_state; then
+    log "tunnel name:  ${CFL_TUNNEL_NAME}"
+    log "tunnel id:    ${CFL_TUNNEL_ID}"
+    log "public url:   https://${CFL_TUNNEL_DOMAIN}"
+    log "config:       ${TUNNEL_CFG}"
+    log "binary:       ${TUNNEL_BIN}"
+    if tunnel_service_active; then
+      log "service:      ${TUNNEL_SV_ACTIVE}"
+      if tunnel_service_running; then
+        ok "tunnel dang chay"
+      else
+        warn "tunnel dang tat (runit: $(sv status "${SERVICE_NAME}-tunnel" 2>/dev/null | head -1))"
+      fi
+    else
+      warn "tunnel chua duoc enable service (chay 'tunnel-setup')"
+    fi
+  else
+    warn "chua cau hinh tunnel"
+    log "chay: $0 tunnel-setup"
+  fi
+}
+
+cmd_tunnel_restart() {
+  cmd_tunnel_stop || true
+  cmd_tunnel_start
+}
+
+cmd_tunnel_remove() {
+  require_termux
+  if tunnel_service_active; then
+    sv down "${SERVICE_NAME}-tunnel" 2>/dev/null || true
+    if command -v sv-disable >/dev/null 2>&1; then
+      sv-disable "${SERVICE_NAME}-tunnel" 2>/dev/null || \
+        rm -f "${TUNNEL_SV_ACTIVE}" "${PREFIX}/var/service/${SERVICE_NAME}-tunnel"
+    else
+      rm -f "${TUNNEL_SV_ACTIVE}" "${PREFIX}/var/service/${SERVICE_NAME}-tunnel"
+    fi
+  fi
+  if [[ -d "${TUNNEL_SV_DIR}" ]]; then
+    rm -rf "${TUNNEL_SV_DIR}"
+  fi
+  if read_tunnel_state; then
+    log "xoa tunnel ${CFL_TUNNEL_NAME} tren Cloudflare"
+    cloudflared tunnel delete "${CFL_TUNNEL_NAME}" 2>/dev/null \
+      || warn "khong the xoa tunnel tren Cloudflare (co the da bi xoa)"
+    cloudflared tunnel route dns --remove "${CFL_TUNNEL_NAME}" "${CFL_TUNNEL_DOMAIN}" 2>/dev/null || true
+  fi
+  rm -f "${TUNNEL_CFG}" "${TUNNEL_STATE}" "${CERT_DST}" \
+    "${TUNNEL_CF_DIR}/${CFL_TUNNEL_ID:-}.json" 2>/dev/null || true
+  ok "da go bo tunnel config"
+}
+
 # --- Full install ------------------------------------------------------------
 full_install() {
   require_termux
@@ -576,6 +931,7 @@ Cac lenh quan ly:
   ${APP_HOME}/deploy/termux/install.sh menu      # menu tuong tac
   ${APP_HOME}/deploy/termux/install.sh wake-lock # chong Android suspend
   ${APP_HOME}/deploy/termux/install.sh disable   # tat autostart (quay lai nohup)
+  ${APP_HOME}/deploy/termux/install.sh tunnel-setup  # Cloudflare Tunnel (public URL)
   ${APP_HOME}/deploy/termux/install.sh uninstall # go bo hoan toan
 EOF
 }
@@ -594,10 +950,11 @@ show_menu() {
  6) Xem log
  7) Wake lock (chong Android suspend)
  8) Enable/Disable autostart (runit)
- 9) Thoat
+ 9) Cloudflare tunnel (setup/status/start/stop)
+10) Thoat
 EOF
     local choice
-    read -r -p "Chon chuc nang [1-9]: " choice
+    read -r -p "Chon chuc nang [1-10]: " choice
     case "${choice}" in
       1) status_app ;;
       2) start_app ;;
@@ -623,7 +980,14 @@ EOF
           cmd_enable
         fi
         ;;
-      9) exit 0 ;;
+      9)
+        if read_tunnel_state; then
+          cmd_tunnel_status
+        else
+          cmd_tunnel_setup
+        fi
+        ;;
+      10) exit 0 ;;
       *) warn "lua chon khong hop le" ;;
     esac
   done
@@ -649,6 +1013,12 @@ Lenh:
   disable      Tat runit service, quay lai che do nohup
   wake-lock    Bat termux-wake-lock (can Termux:API tu F-Droid)
   wake-unlock  Tat termux-wake-lock
+  tunnel-setup Cai dat Cloudflare Tunnel (login + DNS + runit service)
+  tunnel-start Bat cloudflared tunnel service
+  tunnel-stop  Tat cloudflared tunnel service
+  tunnel-restart Khoi dong lai tunnel
+  tunnel-status Xem trang thai tunnel (URL, id, service)
+  tunnel-remove Xoa tunnel config + go service
   uninstall    Dung app, go service, xoa thu muc app
   help         Hien thi tro giup nay
 
@@ -682,6 +1052,12 @@ case "${1:-}" in
   disable)       cmd_disable ;;
   wake-lock)     require_termux; cmd_wake_lock ;;
   wake-unlock)   require_termux; cmd_wake_unlock ;;
+  tunnel-setup)   require_termux; cmd_tunnel_setup ;;
+  tunnel-start)   require_termux; cmd_tunnel_start ;;
+  tunnel-stop)    require_termux; cmd_tunnel_stop ;;
+  tunnel-restart) require_termux; cmd_tunnel_restart ;;
+  tunnel-status)  require_termux; cmd_tunnel_status ;;
+  tunnel-remove)  require_termux; cmd_tunnel_remove ;;
   uninstall)     require_termux; uninstall_app ;;
   help|-h|--help) show_help ;;
   *)             err "lenh khong hop le: $1"; show_help; exit 1 ;;

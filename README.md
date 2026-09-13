@@ -135,6 +135,8 @@ Mọi thao tác quản lý đi qua một script:
 ~/gifcodecfl/deploy/termux/install.sh disable      # tắt runit service (về nohup)
 ~/gifcodecfl/deploy/termux/install.sh wake-lock    # chống Android suspend (cần Termux:API)
 ~/gifcodecfl/deploy/termux/install.sh wake-unlock  # tắt wake-lock
+~/gifcodecfl/deploy/termux/install.sh tunnel-setup  # Cloudflare Tunnel (tạo public URL)
+~/gifcodecfl/deploy/termux/install.sh tunnel-status # xem trạng thái tunnel
 ~/gifcodecfl/deploy/termux/install.sh uninstall    # dừng + gỡ service + xóa thư mục app
 ```
 
@@ -143,6 +145,46 @@ Hoặc chạy menu tương tác:
 ```bash
 ~/gifcodecfl/deploy/termux/install.sh menu
 ```
+
+### Cloudflare Tunnel (public URL từ điện thoại)
+
+Để truy cập app từ bất kỳ đâu trên internet (không cần cùng WiFi), cài đặt **Cloudflare Tunnel**. App sẽ có 1 URL HTTPS public ổn định.
+
+**Yêu cầu**: Bạn đã sở hữu 1 domain và đã trỏ nameserver về Cloudflare (vào [dash.cloudflare.com](https://dash.cloudflare.com) → Add Site).
+
+Sau khi cài app xong:
+
+```bash
+~/gifcodecfl/deploy/termux/install.sh tunnel-setup
+```
+
+Script sẽ tự động:
+
+1. Tải `cloudflared` binary về `$PREFIX/bin/` (auto-detect arm64/arm/amd64).
+2. Chạy `cloudflared tunnel login` — bạn sẽ thấy 1 URL, copy mở trong browser, đăng nhập Cloudflare, chọn domain, bấm **Authorize**. Cert tự lưu vào `~/.cloudflared/`.
+3. Hỏi tên subdomain (vd: `gifcodecfl.example.com`).
+4. Tạo tunnel `gifcodecfl` trên Cloudflare.
+5. Copy credentials + cert vào `$PREFIX/etc/cloudflared/`.
+6. Gán DNS route (`cloudflared tunnel route dns`).
+7. Ghi `config.yml` trỏ vào `http://127.0.0.1:8386`.
+8. Cài runit service `gifcodecfl-tunnel` (auto-restart nếu crash, auto-start mỗi lần mở Termux).
+9. Khởi động và in URL public: `https://gifcodecfl.example.com`.
+
+Quản lý tunnel:
+
+```bash
+~/gifcodecfl/deploy/termux/install.sh tunnel-status   # URL, id, trạng thái
+~/gifcodecfl/deploy/termux/install.sh tunnel-start    # sv up (nếu service đã enable)
+~/gifcodecfl/deploy/termux/install.sh tunnel-stop     # sv down
+~/gifcodecfl/deploy/termux/install.sh tunnel-restart  # restart
+~/gifcodecfl/deploy/termux/install.sh tunnel-remove   # xóa tunnel + DNS + config
+```
+
+**Lưu ý Cloudflare Tunnel**:
+- Cloudflare Tunnel đi ra ngoài qua port 443, nên **không cần port forwarding** trên router.
+- Free plan Cloudflare hỗ trợ unlimited tunnels.
+- Tunnel tự duy trì kết nối liên tục tới Cloudflare edge gần nhất, latency thấp.
+- Nếu muốn tạm dừng public truy cập mà vẫn dùng local: `tunnel-stop` (chỉ tắt cloudflared, app local vẫn chạy).
 
 ### Lưu ý quan trọng
 
