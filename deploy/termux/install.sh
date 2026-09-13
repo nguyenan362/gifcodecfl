@@ -34,8 +34,8 @@ APP_BIN="${APP_HOME}/server"
 APP_PID_FILE="${APP_HOME}/${APP_NAME}.pid"
 APP_LOG_FILE="${APP_HOME}/${APP_NAME}.log"
 APP_ENV_FILE="${APP_HOME}/.env"
-SERVICE_DIR="${PREFIX:-/data/data/com.termux/files/usr}/etc/sv/${SERVICE_NAME}"
-SERVICE_ACTIVE_DIR="${PREFIX:-/data/data/com.termux/files/usr}/etc/service/${SERVICE_NAME}"
+SERVICE_DIR="${PREFIX%/}/etc/sv/${SERVICE_NAME}"
+SERVICE_ACTIVE_DIR="${PREFIX%/}/etc/service/${SERVICE_NAME}"
 
 # --- Mau mau -----------------------------------------------------------------
 if [[ -t 1 ]]; then
@@ -109,7 +109,7 @@ service_status_text() {
 
 write_service_run() {
   ensure_termux_services
-  ensure_dir "$(dirname "${SERVICE_DIR}")"
+  ensure_dir "${SERVICE_DIR}"
   log "ghi runit service: ${SERVICE_DIR}/run"
   cat > "${SERVICE_DIR}/run" <<EOF
 #!/data/data/com.termux/files/usr/bin/sh
@@ -272,7 +272,9 @@ build_app() {
 
 # --- Process / network helpers -----------------------------------------------
 ensure_dir() {
-  mkdir -p "$1"
+  if ! mkdir -p "$1" 2>/dev/null; then
+    die "khong the tao thu muc: $1 (kiem tra quyen ghi)"
+  fi
 }
 
 is_running() {
