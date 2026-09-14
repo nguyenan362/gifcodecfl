@@ -128,10 +128,11 @@ Khong can root, Docker hoac systemd. Termux installer cai `golang`, clone source
 curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash
 ```
 
-Mo `http://localhost:8386`. Quan ly app:
+Menu tu mo sau cai dat. Neu da thoat menu, goi `cfl-termux` hoac `cfl`. Neu shell bao khong tim thay lenh, dung duong dan tuyet doi `$PREFIX/bin/cfl-termux`. Mo `http://localhost:8386`. Quan ly app:
 
 ```bash
 cfl-termux
+cfl
 cfl-install.sh --update
 cfl-install.sh --enable-service
 cfl-install.sh --disable-service

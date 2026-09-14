@@ -17,6 +17,7 @@ build_app() {
   install -Dm755 "$SCRIPT_DIR/install.sh" "$CFL_INSTALL_SCRIPT"
   install -Dm755 "$SCRIPT_DIR/cfl-termux-menu.sh" "$CFL_MENU_SCRIPT"
   ln -sfn "$CFL_MENU_SCRIPT" "$CFL_BIN_LINK"
+  ln -sfn "$CFL_MENU_SCRIPT" "$PREFIX/bin/cfl"
 }
 interactive_install() {
   require_termux
@@ -28,12 +29,14 @@ interactive_install() {
 
 Cai dat xong.
 - Menu: $CFL_BIN_LINK
+- Menu: $PREFIX/bin/cfl
 - URL: http://localhost$(get_listen_port)
 - Log: $CFL_LOG_FILE
 EOF
+  exec "$CFL_MENU_SCRIPT"
 }
 cmd_update() { require_termux; [[ -d "$CFL_INSTALL_ROOT/.git" ]] || fail 'khong phat hien git repo'; (cd "$CFL_INSTALL_ROOT" && git pull --ff-only); build_app; stop_app; start_app; }
-cmd_uninstall() { require_termux; stop_app; rm -f "$CFL_BIN_LINK" "$CFL_INSTALL_SCRIPT" "$CFL_MENU_SCRIPT" "$PREFIX/bin/cfl-termux-lib.sh"; rm -rf "$CFL_INSTALL_ROOT"; log 'da go bo app'; }
+cmd_uninstall() { require_termux; stop_app; rm -f "$CFL_BIN_LINK" "$PREFIX/bin/cfl" "$CFL_INSTALL_SCRIPT" "$CFL_MENU_SCRIPT" "$PREFIX/bin/cfl-termux-lib.sh"; rm -rf "$CFL_INSTALL_ROOT"; log 'da go bo app'; }
 show_help() { printf '%s\n' 'Dung: cfl-install.sh [--update|--enable-service|--disable-service|--wake-lock|--wake-unlock|--uninstall|help]'; }
 case "${1:-}" in
   '') interactive_install;; --update) cmd_update;; --enable-service) require_termux; start_app;; --disable-service) require_termux; stop_app;; --wake-lock) cmd_wake_lock;; --wake-unlock) cmd_wake_unlock;; --uninstall) cmd_uninstall;; help|-h|--help) show_help;; *) fail "tham so khong hop le: $1";;
