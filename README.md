@@ -151,7 +151,7 @@ Chon cau hinh Tunnel khi cai dat, hoac chay:
 cfl-install.sh --configure-tunnel
 ```
 
-Script cai `cloudflared` tu kho Termux, mo dang nhap Cloudflare, tao tunnel `gifcodecfl`, gan DNS va chay public URL. Can domain da quan ly tren Cloudflare. Termux hien URL dang nhap: copy URL, mo browser, xac thuc domain, roi quay lai Termux.
+Script cai `cloudflared` tu kho Termux, mo dang nhap Cloudflare, tao tunnel `gifcodecfl`, gan DNS va chay public URL. Tunnel token duoc luu voi quyen chi user tai `$PREFIX/etc/gifcodecfl/cloudflare.env`, nen khong can copy credential JSON giua thiet bi. Can domain da quan ly tren Cloudflare. Termux hien URL dang nhap: copy URL, mo browser, xac thuc domain, roi quay lai Termux.
 
 Dung hoac mo lai tunnel trong menu muc 4. Go cau hinh va xoa tunnel tren Cloudflare:
 

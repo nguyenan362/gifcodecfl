@@ -128,7 +128,10 @@ start_tunnel() {
   tunnel_running && { log 'Cloudflare Tunnel dang chay'; return; }
   local bin; bin="$(cloudflared_bin)"
   [[ -n "$bin" ]] || { install_cloudflared; bin="$(cloudflared_bin)"; }
-  nohup "$bin" tunnel --config "$CFL_CLOUDFLARED_CONFIG" --no-autoupdate run >> "$CFL_TUNNEL_LOG_FILE" 2>&1 &
+  local token
+  token="$(read_env_value "$CFL_TUNNEL_STATE_FILE" CFL_TUNNEL_TOKEN 2>/dev/null || true)"
+  [[ -n "$token" ]] || fail 'thieu Tunnel token; chay lai --configure-tunnel'
+  nohup "$bin" tunnel --config "$CFL_CLOUDFLARED_CONFIG" --no-autoupdate run --token "$token" >> "$CFL_TUNNEL_LOG_FILE" 2>&1 &
   printf '%s' "$!" > "$CFL_TUNNEL_PID_FILE"
   sleep 1; tunnel_running || fail "Tunnel khong khoi dong; xem log $CFL_TUNNEL_LOG_FILE"
   log "Cloudflare Tunnel da chay (PID $(cat "$CFL_TUNNEL_PID_FILE"))"
@@ -136,7 +139,7 @@ start_tunnel() {
 stop_tunnel() { if tunnel_running; then kill "$(cat "$CFL_TUNNEL_PID_FILE")" 2>/dev/null || true; fi; rm -f "$CFL_TUNNEL_PID_FILE"; log 'Cloudflare Tunnel da dung'; }
 current_domain() { read_env_value "$CFL_TUNNEL_STATE_FILE" CFL_DOMAIN 2>/dev/null || true; }
 configure_cloudflare_tunnel() {
-  local bin domain tunnel_id port
+  local bin domain tunnel_id token port
   install_cloudflared; bin="$(cloudflared_bin)"
   log 'Cloudflared se hien URL dang nhap. Mo URL tren browser, xac thuc Cloudflare, roi quay lai Termux.'
   "$bin" tunnel login
@@ -148,18 +151,20 @@ configure_cloudflare_tunnel() {
   fi
   tunnel_id="$("$bin" tunnel info "$CFL_TUNNEL_NAME" 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"
   [[ -n "$tunnel_id" ]] || fail "khong lay duoc ID tunnel $CFL_TUNNEL_NAME"
+  token="$("$bin" tunnel token "$CFL_TUNNEL_NAME")"
+  [[ -n "$token" ]] || fail "khong lay duoc token cho tunnel $CFL_TUNNEL_NAME"
   "$bin" tunnel route dns "$CFL_TUNNEL_NAME" "$domain"
   ensure_dir "$CFL_CLOUDFLARED_DIR"
   port="$(get_listen_port)"
   cat > "$CFL_CLOUDFLARED_CONFIG" <<EOF
 tunnel: $tunnel_id
-credentials-file: ${HOME}/.cloudflared/${tunnel_id}.json
 ingress:
   - hostname: $domain
     service: http://127.0.0.1${port}
   - service: http_status:404
 EOF
-  printf 'CFL_DOMAIN=%s\nCFL_TUNNEL_ID=%s\n' "$domain" "$tunnel_id" > "$CFL_TUNNEL_STATE_FILE"
+  printf 'CFL_DOMAIN=%s\nCFL_TUNNEL_ID=%s\nCFL_TUNNEL_TOKEN=%s\n' "$domain" "$tunnel_id" "$token" > "$CFL_TUNNEL_STATE_FILE"
+  chmod 600 "$CFL_TUNNEL_STATE_FILE"
   log "Tunnel da cau hinh cho https://$domain"
   start_tunnel
 }
