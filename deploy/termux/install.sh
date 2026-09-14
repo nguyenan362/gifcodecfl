@@ -13,16 +13,29 @@ SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_SRC}")" && pwd)"
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/cfl-termux-lib.sh"
 
+# Nap profile som de lay CFL_INSTALL_ROOT chinh xac (profile co the ghi de gia
+# tri mac dinh cua lib). Sau do tinh REPO_ROOT va cho phep profile override
+# REPO_ROOT neu no ton tai va hop le (co web/ + go.mod).
+load_profile_file
+
 # REPO_ROOT: thu muc chua source that (web/, main.go, go.mod). Mac dinh lay
 # <SCRIPT_DIR>/../.. khi chay trong repo git clone. Khi install.sh da duoc copy
 # ra $PREFIX/bin/cfl-install.sh thi khong con source o do -> tu dong chuyen ve
 # CFL_INSTALL_ROOT (noi git clone hoac source hien nam), neu co web/.
 _DEFAULT_REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-if [[ ! -d "${_DEFAULT_REPO_ROOT}/web" ]] && [[ -d "${CFL_INSTALL_ROOT}/web" ]]; then
+if [[ -d "${_DEFAULT_REPO_ROOT}/web" ]] && [[ -f "${_DEFAULT_REPO_ROOT}/go.mod" ]]; then
+  REPO_ROOT="${_DEFAULT_REPO_ROOT}"
+elif [[ -d "${CFL_INSTALL_ROOT}/web" ]] && [[ -f "${CFL_INSTALL_ROOT}/go.mod" ]]; then
   REPO_ROOT="${CFL_INSTALL_ROOT}"
 else
-  REPO_ROOT="${_DEFAULT_REPO_ROOT}"
+  # Thu phuong an cuoi: profile export CFL_REPO_ROOT (override tay)
+  if [[ -n "${CFL_REPO_ROOT:-}" ]] && [[ -d "${CFL_REPO_ROOT}/web" ]]; then
+    REPO_ROOT="${CFL_REPO_ROOT}"
+  else
+    REPO_ROOT="${_DEFAULT_REPO_ROOT}"
+  fi
 fi
+export REPO_ROOT
 
 ensure_repo_source() {
   if [[ ! -d "${CFL_INSTALL_ROOT}/.git" ]]; then
