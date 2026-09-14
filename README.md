@@ -6,6 +6,7 @@ Web app đơn giản để nhập `userID` và nhiều gift code, sau đó gọi
 
 | Nền tảng | Câu lệnh |
 | --- | --- |
+| **Termux (Android)** | `curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash` |
 | **Linux (systemd)** | `curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/native/install.sh -o install.sh && sudo bash install.sh` |
 | **Docker** | `cp .env.example .env && docker compose up -d --build` |
 
@@ -116,6 +117,28 @@ Menu gom 4 muc:
 2. Bat/Tat chay app
 3. Cau hinh lai hoac go bo Cloudflare Tunnel
 4. Thoat
+
+## Chay tren Termux (Android)
+
+Khong can root, Docker hoac systemd. Termux installer cai `golang`, clone source, build binary va chay app bang `nohup`; PID luu tai `$PREFIX/etc/gifcodecfl/server.pid`, log tai `~/gifcodecfl/gifcodecfl.log`.
+
+### Cai dat
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nguyenan362/gifcodecfl/main/deploy/termux/termux-bootstrap.sh | bash
+```
+
+Mo `http://localhost:8386`. Quan ly app:
+
+```bash
+cfl-termux
+cfl-install.sh --update
+cfl-install.sh --enable-service
+cfl-install.sh --disable-service
+cfl-install.sh --uninstall
+```
+
+Android co the suspend Termux khi tat man hinh. Cai Termux:API tu F-Droid neu can app chay lien tuc, sau do chay `cfl-install.sh --wake-lock`. Mo lai Termux sau reboot de khoi dong app.
 
 ## API nội bộ
 
