@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"embed"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +24,9 @@ const (
 	fixedGameCode        = "A49"
 	maxConcurrentRedeems = 10
 )
+
+//go:embed all:web
+var embeddedWeb embed.FS
 
 type server struct {
 	httpClient *http.Client
@@ -69,7 +74,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir("web")))
+	mux.Handle("/", http.FileServer(staticFS()))
 	mux.HandleFunc("/api/redeem", srv.handleRedeem)
 
 	addr := fallback(strings.TrimSpace(os.Getenv("PORT")), defaultListenAddr)
@@ -233,4 +238,17 @@ func withCORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// staticFS tra ve fs cho thu muc web. uu tien thu muc "web" ben canh binary
+// (hot-swap file), neu khong co thi dung ban embed trong binary.
+func staticFS() http.FileSystem {
+	if info, err := os.Stat("web"); err == nil && info.IsDir() {
+		return http.Dir("web")
+	}
+	sub, err := fs.Sub(embeddedWeb, "web")
+	if err != nil {
+		log.Fatalf("embed web: %v", err)
+	}
+	return http.FS(sub)
 }

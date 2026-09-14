@@ -13,29 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_SRC}")" && pwd)"
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/cfl-termux-lib.sh"
 
-# Nap profile som de lay CFL_INSTALL_ROOT chinh xac (profile co the ghi de gia
-# tri mac dinh cua lib). Sau do tinh REPO_ROOT va cho phep profile override
-# REPO_ROOT neu no ton tai va hop le (co web/ + go.mod).
 load_profile_file
-
-# REPO_ROOT: thu muc chua source that (web/, main.go, go.mod). Mac dinh lay
-# <SCRIPT_DIR>/../.. khi chay trong repo git clone. Khi install.sh da duoc copy
-# ra $PREFIX/bin/cfl-install.sh thi khong con source o do -> tu dong chuyen ve
-# CFL_INSTALL_ROOT (noi git clone hoac source hien nam), neu co web/.
-_DEFAULT_REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-if [[ -d "${_DEFAULT_REPO_ROOT}/web" ]] && [[ -f "${_DEFAULT_REPO_ROOT}/go.mod" ]]; then
-  REPO_ROOT="${_DEFAULT_REPO_ROOT}"
-elif [[ -d "${CFL_INSTALL_ROOT}/web" ]] && [[ -f "${CFL_INSTALL_ROOT}/go.mod" ]]; then
-  REPO_ROOT="${CFL_INSTALL_ROOT}"
-else
-  # Thu phuong an cuoi: profile export CFL_REPO_ROOT (override tay)
-  if [[ -n "${CFL_REPO_ROOT:-}" ]] && [[ -d "${CFL_REPO_ROOT}/web" ]]; then
-    REPO_ROOT="${CFL_REPO_ROOT}"
-  else
-    REPO_ROOT="${_DEFAULT_REPO_ROOT}"
-  fi
-fi
-export REPO_ROOT
 
 ensure_repo_source() {
   if [[ ! -d "${CFL_INSTALL_ROOT}/.git" ]]; then
@@ -43,11 +21,6 @@ ensure_repo_source() {
     ensure_dir "$(dirname "${CFL_INSTALL_ROOT}")"
     rm -rf "${CFL_INSTALL_ROOT}"
     git clone --depth 1 -b "${CFL_REPO_BRANCH}" "${CFL_REPO_URL}" "${CFL_INSTALL_ROOT}"
-  fi
-  # Sau khi clone: dong bo REPO_ROOT ve CFL_INSTALL_ROOT (noi git source nam)
-  if [[ ! -f "${REPO_ROOT}/go.mod" ]] && [[ -f "${CFL_INSTALL_ROOT}/go.mod" ]]; then
-    REPO_ROOT="${CFL_INSTALL_ROOT}"
-    export REPO_ROOT
   fi
 }
 
@@ -61,39 +34,25 @@ update_repo_source() {
     git fetch --depth 1 origin "${CFL_REPO_BRANCH}"
     git reset --hard "origin/${CFL_REPO_BRANCH}"
   )
-  # Sau khi pull: build phai doc source tu chinh CFL_INSTALL_ROOT (vua duoc
-  # git reset moi nhat), khong phai noi script copy ra ($PREFIX/bin/../..).
-  if [[ -f "${CFL_INSTALL_ROOT}/go.mod" ]]; then
-    REPO_ROOT="${CFL_INSTALL_ROOT}"
-    export REPO_ROOT
-  fi
 }
 
+# Build truc tiep trong CFL_INSTALL_ROOT (git repo). Thu muc web/ duoc embed
+# vao binary bang go:embed nen khong can copy rieng.
 build_app() {
+  ensure_repo_source
   ensure_pkg_cmd golang
-  ensure_dir "${CFL_INSTALL_ROOT}"
   ensure_dir "${CFL_BIN_DIR}"
 
-  log "build binary Go"
-  # Neu REPO_ROOT khong hop le nhung CFL_INSTALL_ROOT la git repo -> pull va
-  # build truc tiep tu do (phuc vu truong hop chay cfl-install.sh o $PREFIX/bin
-  # hoac khi `--update` duoc goi ma chua co source trong cwd).
-  if [[ ! -f "${REPO_ROOT}/go.mod" ]] && [[ -d "${CFL_INSTALL_ROOT}/.git" ]]; then
-    update_repo_source
+  if [[ ! -f "${CFL_INSTALL_ROOT}/go.mod" ]]; then
+    fail "khong tim thay source Go tai ${CFL_INSTALL_ROOT} (thieu go.mod)."
   fi
-  if [[ ! -f "${REPO_ROOT}/go.mod" ]]; then
-    fail "khong tim thay source Go tai '${REPO_ROOT}' (thieu go.mod). Hay clone repo: cd ~/gifcodecfl && bash deploy/termux/install.sh --update"
-  fi
-  if [[ ! -d "${REPO_ROOT}/web" ]]; then
-    fail "khong tim thay thu muc static '${REPO_ROOT}/web'. Hay chay install.sh tu thu muc repo hoac clone repo truoc."
-  fi
+
+  log "build binary Go (web/ duoc embed vao binary)"
   (
-    cd "${REPO_ROOT}"
-    CGO_ENABLED=0 go build -buildvcs=false -o "${CFL_INSTALL_ROOT}/server" .
+    cd "${CFL_INSTALL_ROOT}"
+    CGO_ENABLED=0 go build -trimpath -buildvcs=false -o server .
   )
 
-  rm -rf "${CFL_INSTALL_ROOT}/web"
-  cp -R "${REPO_ROOT}/web" "${CFL_INSTALL_ROOT}/web"
   install -m 0755 "${SCRIPT_DIR}/cfl-termux-lib.sh"   "${CFL_BIN_DIR}/cfl-termux-lib.sh"
   install -m 0755 "${SCRIPT_DIR}/install.sh"          "${CFL_INSTALL_SCRIPT}"
   install -m 0755 "${SCRIPT_DIR}/cfl-termux-menu.sh"  "${CFL_MENU_SCRIPT}"
