@@ -13,3 +13,4 @@ while true; do
     4) is_wake_locked && cmd_wake_unlock || cmd_wake_lock;;
     5) exit 0;; *) warn 'lua chon khong hop le';;
   esac
+done
