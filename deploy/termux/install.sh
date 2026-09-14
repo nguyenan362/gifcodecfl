@@ -44,11 +44,16 @@ ensure_repo_source() {
     rm -rf "${CFL_INSTALL_ROOT}"
     git clone --depth 1 -b "${CFL_REPO_BRANCH}" "${CFL_REPO_URL}" "${CFL_INSTALL_ROOT}"
   fi
+  # Sau khi clone: dong bo REPO_ROOT ve CFL_INSTALL_ROOT (noi git source nam)
+  if [[ ! -f "${REPO_ROOT}/go.mod" ]] && [[ -f "${CFL_INSTALL_ROOT}/go.mod" ]]; then
+    REPO_ROOT="${CFL_INSTALL_ROOT}"
+    export REPO_ROOT
+  fi
 }
 
 update_repo_source() {
   if [[ ! -d "${CFL_INSTALL_ROOT}/.git" ]]; then
-    fail "khong phat hien git repo tai ${CFL_INSTALL_ROOT}"
+    fail "khong phat hien git repo tai ${CFL_INSTALL_ROOT}. Hay chay install.sh mac dinh de clone truoc."
   fi
   log "cap nhat repo"
   (
@@ -56,6 +61,12 @@ update_repo_source() {
     git fetch --depth 1 origin "${CFL_REPO_BRANCH}"
     git reset --hard "origin/${CFL_REPO_BRANCH}"
   )
+  # Sau khi pull: build phai doc source tu chinh CFL_INSTALL_ROOT (vua duoc
+  # git reset moi nhat), khong phai noi script copy ra ($PREFIX/bin/../..).
+  if [[ -f "${CFL_INSTALL_ROOT}/go.mod" ]]; then
+    REPO_ROOT="${CFL_INSTALL_ROOT}"
+    export REPO_ROOT
+  fi
 }
 
 build_app() {
@@ -64,8 +75,14 @@ build_app() {
   ensure_dir "${CFL_BIN_DIR}"
 
   log "build binary Go"
+  # Neu REPO_ROOT khong hop le nhung CFL_INSTALL_ROOT la git repo -> pull va
+  # build truc tiep tu do (phuc vu truong hop chay cfl-install.sh o $PREFIX/bin
+  # hoac khi `--update` duoc goi ma chua co source trong cwd).
+  if [[ ! -f "${REPO_ROOT}/go.mod" ]] && [[ -d "${CFL_INSTALL_ROOT}/.git" ]]; then
+    update_repo_source
+  fi
   if [[ ! -f "${REPO_ROOT}/go.mod" ]]; then
-    fail "khong tim thay source Go tai ${REPO_ROOT} (thieu go.mod). Hay chay install.sh tu thu muc repo hoac clone repo truoc."
+    fail "khong tim thay source Go tai '${REPO_ROOT}' (thieu go.mod). Hay clone repo: cd ~/gifcodecfl && bash deploy/termux/install.sh --update"
   fi
   if [[ ! -d "${REPO_ROOT}/web" ]]; then
     fail "khong tim thay thu muc static '${REPO_ROOT}/web'. Hay chay install.sh tu thu muc repo hoac clone repo truoc."
