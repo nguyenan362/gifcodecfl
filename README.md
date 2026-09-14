@@ -133,7 +133,9 @@ cfl-termux          # chon muc 4 de bat/tat wake-lock
 ~/gifcodecfl/deploy/termux/install.sh --wake-lock
 ```
 
-Wake-lock là global (giữ cho cả Termux, không chỉ app), persist cho đến khi gọi `--wake-unlock` hoặc reboot. Nếu reboot thì chạy lại lệnh trên.
+Wake-lock là global (giữ cho cả Termux, không chỉ app), persist cho đến khi gọi `--wake-unlock` hoặc reboot. Sau khi reboot, runit service **tự bật lại wake-lock** khi khởi động (không cần chạy lại lệnh thủ công). Lệnh `--disable-service` và `--uninstall` sẽ tự nhả wake-lock.
+
+> **Lưu ý:** Script phát hiện Termux bản Google Play (bị lỗi `e_type`, không chạy được binary Go trên Android 10+) và cảnh báo trước khi cài. Hãy dùng bản từ [F-Droid](https://f-droid.org/packages/com.termux/) hoặc [GitHub releases](https://github.com/termux/termux-app/releases).
 
 ### Menu tương tác (giống native's `cfl`)
 

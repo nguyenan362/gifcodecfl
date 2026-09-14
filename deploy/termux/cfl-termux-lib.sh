@@ -58,6 +58,7 @@ require_termux() {
   if ! command -v pkg >/dev/null 2>&1; then
     fail "khong tim thay 'pkg'. Hay cai Termux chinh hang tu F-Droid."
   fi
+  warn_if_termux_googleplay
 }
 
 ensure_binary() {
@@ -83,6 +84,43 @@ prompt_yes_no() {
     esac
     warn "chi nhap y hoac n"
   done
+}
+
+# --- Kiem tra Termux ban Google Play (loi e_type khi chay binary Go) ---------
+detect_termux_googleplay() {
+  local t_info t_ver
+  t_info="$(termux-info 2>/dev/null || echo "")"
+  t_ver="$(echo "${t_info}" | grep "TERMUX_VERSION" | cut -d'=' -f2)"
+  t_ver="${t_ver:-${TERMUX_VERSION:-unknown}}"
+  if [[ "${t_ver}" == *"googleplay"* ]] || [[ "${t_info}" == *"googleplay"* ]] || [[ "${t_ver}" == "0.101" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+warn_if_termux_googleplay() {
+  detect_termux_googleplay || return 0
+  echo ""
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "  CANH BAO: PHAT HIEN TERMUX BAN GOOGLE PLAY"
+  echo "----------------------------------------------------------------"
+  echo "Ban dang dung Termux tai tu Google Play. Ban nay bi han che boi"
+  echo "chinh sach cua Google nen KHONG THE chay cac ung dung Go nhu"
+  echo "gifcodecfl tren Android 10+ (loi e_type khi exec binary)."
+  echo ""
+  echo "CACH KHAC PHUC:"
+  echo "  1. Go cai dat Termux hien tai."
+  echo "  2. Cai ban moi nhat tu F-Droid hoac GitHub:"
+  echo "     https://github.com/termux/termux-app/releases"
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo ""
+  if [[ -t 0 ]]; then
+    if ! prompt_yes_no "Ban van muon tiep tuc du co the gap loi?" "n"; then
+      exit 1
+    fi
+  else
+    warn "khong co terminal tuong tac, tiep tuc voi rui ro loi e_type"
+  fi
 }
 
 prompt_default() {
@@ -221,6 +259,10 @@ is_wake_locked() {
   [[ -f "${CFL_WAKE_LOCK_STATE}" ]]
 }
 
+ensure_wake_lock_state_dir() {
+  ensure_dir "$(dirname "${CFL_WAKE_LOCK_STATE}")"
+}
+
 cmd_wake_lock() {
   require_termux
   if ! wake_lock_supported; then
@@ -231,7 +273,7 @@ cmd_wake_lock() {
     return 1
   fi
   if termux-wake-lock; then
-    ensure_dir "${CFL_ETC_DIR}"
+    ensure_wake_lock_state_dir
     date '+%Y-%m-%dT%H:%M:%S%z' > "${CFL_WAKE_LOCK_STATE}"
     ok "wake-lock da bat (app se song khi tat man hinh)"
   else
@@ -359,11 +401,21 @@ APP_HOME="${CFL_INSTALL_ROOT}"
 APP_ENV_FILE="${CFL_ENV_FILE}"
 APP_BIN="${CFL_INSTALL_ROOT}/server"
 APP_LOG="${CFL_INSTALL_ROOT}/gifcodecfl.log"
+# Bat wake-lock moi khi service khoi dong de song qua dem sau khi reboot.
+# Chi nhap lenh khi chua co lock (trang thai state file do lib quan ly).
+if [ -x "${PREFIX}/bin/termux-wake-lock" ] && [ ! -f "${CFL_WAKE_LOCK_STATE}" ]; then
+  "${PREFIX}/bin/termux-wake-lock" 2>/dev/null || true
+fi
 cd "\${APP_HOME}" || exit 1
 if [ -f "\${APP_ENV_FILE}" ]; then
   set -a
   . "\${APP_ENV_FILE}"
   set +a
+fi
+# Cap nhat state file de run script khong goi termux-wake-lock lap lai moi lan restart.
+if [ ! -f "${CFL_WAKE_LOCK_STATE}" ] && [ -x "${PREFIX}/bin/termux-wake-lock" ]; then
+  mkdir -p "$(dirname "${CFL_WAKE_LOCK_STATE}")" 2>/dev/null || true
+  date '+%Y-%m-%dT%H:%M:%S%z' > "${CFL_WAKE_LOCK_STATE}" 2>/dev/null || true
 fi
 exec "\${APP_BIN}" >>"\${APP_LOG}" 2>&1
 EOF
@@ -390,11 +442,16 @@ uninstall_app_service() {
 
 # --- Cloudflared binary -------------------------------------------------------
 detect_termux_arch() {
-  case "$(uname -m)" in
+  # uu tien dpkg (Termux) vi uname -m co tra ve 32bit tren kernel 64bit -> sai arch
+  local arch=""
+  if [[ "${PREFIX}" == */com.termux/* ]] && command -v dpkg >/dev/null 2>&1; then
+    arch="$(dpkg --print-architecture 2>/dev/null || echo "")"
+  fi
+  case "${arch:-$(uname -m)}" in
     aarch64|arm64)        echo "arm64" ;;
-    armv7l|armv7|armhf)   echo "arm" ;;
+    arm|armv7l|armv7|armhf) echo "arm" ;;
     x86_64|amd64)         echo "amd64" ;;
-    i386|i686)            echo "386" ;;
+    i386|i686|386)        echo "386" ;;
     *) return 1 ;;
   esac
 }
@@ -414,6 +471,11 @@ install_cloudflared() {
   fi
   mv -f "${dest}.tmp" "${dest}"
   chmod +x "${dest}"
+  # Verify binary chay duoc (phat hien mount noexec / sai arch som hon la luc service crash)
+  if ! "${dest}" --version >/dev/null 2>&1; then
+    rm -f "${dest}"
+    fail "cloudflared tai ve khong chay duoc tren thiet bi nay (co the do mount noexec hoac sai kien truc ${arch}). Cai bang pkg: pkg install -y cloudflared"
+  fi
   ok "cloudflared: $("${dest}" --version 2>&1 | head -1)"
 }
 

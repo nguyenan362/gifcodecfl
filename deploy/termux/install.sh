@@ -62,6 +62,8 @@ build_app() {
 
 interactive_install() {
   require_termux
+  # Check som ban Google Play truoc khi cai dat/clone de tranh nguoi dung cho oan
+  warn_if_termux_googleplay
   ensure_binary sed
   ensure_binary cp
   ensure_binary curl
@@ -185,6 +187,7 @@ cmd_uninstall() {
   sv down "${CFL_SERVICE_NAME}" 2>/dev/null || true
   uninstall_app_service
   uninstall_tunnel_service
+  cmd_wake_unlock || true
   log "xoa thu muc app: ${CFL_INSTALL_ROOT}"
   rm -rf "${CFL_INSTALL_ROOT}"
   ok "da go bo"
@@ -202,6 +205,7 @@ cmd_disable_service() {
   require_termux
   sv down "${CFL_SERVICE_NAME}" 2>/dev/null || true
   uninstall_app_service
+  cmd_wake_unlock || true
   ok "service da tat. Chay '${CFL_INSTALL_SCRIPT} --enable-service' de bat lai."
 }
 
