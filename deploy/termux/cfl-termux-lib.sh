@@ -66,7 +66,11 @@ export CFL_REPO_BRANCH="$CFL_REPO_BRANCH"
 export CFL_WAKE_LOCK_STATE="$CFL_WAKE_LOCK_STATE"
 EOF
 }
-load_profile_file() { [[ -f "$CFL_PROFILE_FILE" ]] && . "$CFL_PROFILE_FILE"; }
+load_profile_file() {
+  if [[ -f "$CFL_PROFILE_FILE" ]]; then
+    . "$CFL_PROFILE_FILE"
+  fi
+}
 ensure_profile_vars() { [[ -f "$CFL_PROFILE_FILE" ]] || write_profile_file; }
 ensure_default_env_file() {
   ensure_dir "$CFL_ETC_DIR"
