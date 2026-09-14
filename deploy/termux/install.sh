@@ -9,10 +9,20 @@ if command -v readlink >/dev/null 2>&1; then
   SCRIPT_SRC="$(readlink -f "${SCRIPT_SRC}" 2>/dev/null || printf '%s' "${SCRIPT_SRC}")"
 fi
 SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_SRC}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/cfl-termux-lib.sh"
+
+# REPO_ROOT: thu muc chua source that (web/, main.go, go.mod). Mac dinh lay
+# <SCRIPT_DIR>/../.. khi chay trong repo git clone. Khi install.sh da duoc copy
+# ra $PREFIX/bin/cfl-install.sh thi khong con source o do -> tu dong chuyen ve
+# CFL_INSTALL_ROOT (noi git clone hoac source hien nam), neu co web/.
+_DEFAULT_REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+if [[ ! -d "${_DEFAULT_REPO_ROOT}/web" ]] && [[ -d "${CFL_INSTALL_ROOT}/web" ]]; then
+  REPO_ROOT="${CFL_INSTALL_ROOT}"
+else
+  REPO_ROOT="${_DEFAULT_REPO_ROOT}"
+fi
 
 ensure_repo_source() {
   if [[ ! -d "${CFL_INSTALL_ROOT}/.git" ]]; then
@@ -41,6 +51,12 @@ build_app() {
   ensure_dir "${CFL_BIN_DIR}"
 
   log "build binary Go"
+  if [[ ! -f "${REPO_ROOT}/go.mod" ]]; then
+    fail "khong tim thay source Go tai ${REPO_ROOT} (thieu go.mod). Hay chay install.sh tu thu muc repo hoac clone repo truoc."
+  fi
+  if [[ ! -d "${REPO_ROOT}/web" ]]; then
+    fail "khong tim thay thu muc static '${REPO_ROOT}/web'. Hay chay install.sh tu thu muc repo hoac clone repo truoc."
+  fi
   (
     cd "${REPO_ROOT}"
     CGO_ENABLED=0 go build -buildvcs=false -o "${CFL_INSTALL_ROOT}/server" .
