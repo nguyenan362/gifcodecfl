@@ -138,8 +138,16 @@ current_domain() { read_env_value "$CFL_TUNNEL_STATE_FILE" CFL_DOMAIN 2>/dev/nul
 configure_cloudflare_tunnel() {
   local bin domain tunnel_id credential_file port
   install_cloudflared; bin="$(cloudflared_bin)"
-  log 'Cloudflared se hien URL dang nhap. Mo URL tren browser, xac thuc Cloudflare, roi quay lai Termux.'
-  "$bin" tunnel login
+  if [[ -f "${HOME}/.cloudflared/cert.pem" ]]; then
+    log 'da tim thay Cloudflare certificate, dung lai xac thuc hien tai'
+    if prompt_yes_no 'Dang nhap Cloudflare lai? (se ghi de certificate)' n; then
+      rm -f "${HOME}/.cloudflared/cert.pem"
+      "$bin" tunnel login
+    fi
+  else
+    log 'Cloudflared se hien URL dang nhap. Mo URL tren browser, xac thuc Cloudflare, roi quay lai Termux.'
+    "$bin" tunnel login
+  fi
   domain="$(prompt_default 'Nhap domain expose (vd: cfl.example.com)' "$(current_domain)")"
   [[ -n "$domain" ]] || fail 'domain khong duoc de trong'
   if ! "$bin" tunnel info "$CFL_TUNNEL_NAME" >/dev/null 2>&1; then
