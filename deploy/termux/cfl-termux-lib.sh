@@ -135,9 +135,12 @@ start_tunnel() {
 }
 stop_tunnel() { if tunnel_running; then kill "$(cat "$CFL_TUNNEL_PID_FILE")" 2>/dev/null || true; fi; rm -f "$CFL_TUNNEL_PID_FILE"; log 'Cloudflare Tunnel da dung'; }
 current_domain() { read_env_value "$CFL_TUNNEL_STATE_FILE" CFL_DOMAIN 2>/dev/null || true; }
+current_tunnel_name() { read_env_value "$CFL_TUNNEL_STATE_FILE" CFL_TUNNEL_NAME 2>/dev/null || true; }
 configure_cloudflare_tunnel() {
-  local bin domain tunnel_id credential_file port
+  local bin domain tunnel_id credential_file port tunnel_name
   install_cloudflared; bin="$(cloudflared_bin)"
+  tunnel_name="$(current_tunnel_name)"
+  CFL_TUNNEL_NAME="${tunnel_name:-$CFL_TUNNEL_NAME}"
   if [[ -f "${HOME}/.cloudflared/cert.pem" ]]; then
     log 'da tim thay Cloudflare certificate, dung lai xac thuc hien tai'
     if prompt_yes_no 'Dang nhap Cloudflare lai? (se ghi de certificate)' n; then
@@ -159,17 +162,19 @@ configure_cloudflare_tunnel() {
   credential_file="${HOME}/.cloudflared/${tunnel_id}.json"
   if [[ ! -f "$credential_file" ]]; then
     warn "tunnel $CFL_TUNNEL_NAME ton tai nhung thieu credential tren dien thoai"
-    if ! prompt_yes_no 'Xoa tunnel cu tren Cloudflare va tao lai?' y; then
-      fail 'khong the chay locally-managed tunnel khi thieu credential'
+    warn 'Cloudflare khong the xoa tunnel khi van co connector dang chay'
+    CFL_TUNNEL_NAME="$(prompt_default 'Nhap ten tunnel moi' "${CFL_TUNNEL_NAME}-termux")"
+    [[ -n "$CFL_TUNNEL_NAME" ]] || fail 'ten tunnel khong duoc de trong'
+    if "$bin" tunnel info "$CFL_TUNNEL_NAME" >/dev/null 2>&1; then
+      fail "tunnel $CFL_TUNNEL_NAME da ton tai; chon ten khac"
     fi
-    "$bin" tunnel delete "$CFL_TUNNEL_NAME"
     "$bin" tunnel create "$CFL_TUNNEL_NAME"
     tunnel_id="$("$bin" tunnel info "$CFL_TUNNEL_NAME" 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"
     [[ -n "$tunnel_id" ]] || fail "khong lay duoc ID tunnel moi $CFL_TUNNEL_NAME"
     credential_file="${HOME}/.cloudflared/${tunnel_id}.json"
     [[ -f "$credential_file" ]] || fail "khong tao duoc credential $credential_file"
   fi
-  "$bin" tunnel route dns "$CFL_TUNNEL_NAME" "$domain"
+  "$bin" tunnel route dns --overwrite-dns "$CFL_TUNNEL_NAME" "$domain"
   ensure_dir "$CFL_CLOUDFLARED_DIR"
   port="$(get_listen_port)"
   cat > "$CFL_CLOUDFLARED_CONFIG" <<EOF
@@ -180,17 +185,19 @@ ingress:
     service: http://127.0.0.1${port}
   - service: http_status:404
 EOF
-  printf 'CFL_DOMAIN=%s\nCFL_TUNNEL_ID=%s\n' "$domain" "$tunnel_id" > "$CFL_TUNNEL_STATE_FILE"
+  printf 'CFL_DOMAIN=%s\nCFL_TUNNEL_NAME=%s\nCFL_TUNNEL_ID=%s\n' "$domain" "$CFL_TUNNEL_NAME" "$tunnel_id" > "$CFL_TUNNEL_STATE_FILE"
   chmod 600 "$CFL_TUNNEL_STATE_FILE"
   log "Tunnel da cau hinh cho https://$domain"
   start_tunnel
 }
 remove_cloudflare_tunnel() {
-  local bin; stop_tunnel
+  local bin tunnel_name; stop_tunnel
+  tunnel_name="$(current_tunnel_name)"
+  tunnel_name="${tunnel_name:-$CFL_TUNNEL_NAME}"
   if [[ -n "$(cloudflared_bin)" ]]; then
     bin="$(cloudflared_bin)"
-    if "$bin" tunnel info "$CFL_TUNNEL_NAME" >/dev/null 2>&1; then
-      "$bin" tunnel delete "$CFL_TUNNEL_NAME" || warn 'khong xoa duoc tunnel tren Cloudflare'
+    if "$bin" tunnel info "$tunnel_name" >/dev/null 2>&1; then
+      "$bin" tunnel delete "$tunnel_name" || warn 'khong xoa duoc tunnel tren Cloudflare'
     fi
   fi
   rm -f "$CFL_CLOUDFLARED_CONFIG" "$CFL_TUNNEL_STATE_FILE"

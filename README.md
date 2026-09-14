@@ -153,7 +153,7 @@ cfl-install.sh --configure-tunnel
 
 Script cai `cloudflared` tu kho Termux, mo dang nhap Cloudflare, tao locally-managed tunnel `gifcodecfl`, gan DNS va chay public URL. Credential tunnel nam tai `~/.cloudflared/` tren dien thoai. Can domain da quan ly tren Cloudflare. Termux hien URL dang nhap: copy URL, mo browser, xac thuc domain, roi quay lai Termux.
 
-Tunnel `gifcodecfl` da tao tren may khac khong co credential JSON tren dien thoai nay khong the chay. Script se hoi xoa tunnel cu tren Cloudflare va tao lai. Xac nhan chi khi tunnel cu khong con duoc su dung.
+Tunnel `gifcodecfl` da tao tren may khac khong co credential JSON tren dien thoai nay khong the chay. Script se hoi ten tunnel moi, mac dinh `gifcodecfl-termux`. Tunnel cu khong bi xoa, tranh loi Cloudflare khi connector cu van dang chay.
 
 Dung hoac mo lai tunnel trong menu muc 4. Go cau hinh va xoa tunnel tren Cloudflare:
 
