@@ -15,6 +15,12 @@ CFL_LOG_FILE="${CFL_LOG_FILE:-${CFL_INSTALL_ROOT}/gifcodecfl.log}"
 CFL_REPO_URL="${CFL_REPO_URL:-https://github.com/nguyenan362/gifcodecfl.git}"
 CFL_REPO_BRANCH="${CFL_REPO_BRANCH:-main}"
 CFL_WAKE_LOCK_STATE="${CFL_WAKE_LOCK_STATE:-${CFL_ETC_DIR}/wakelock.state}"
+CFL_CLOUDFLARED_DIR="${CFL_CLOUDFLARED_DIR:-${PREFIX}/etc/cloudflared}"
+CFL_CLOUDFLARED_CONFIG="${CFL_CLOUDFLARED_CONFIG:-${CFL_CLOUDFLARED_DIR}/config.yml}"
+CFL_TUNNEL_NAME="${CFL_TUNNEL_NAME:-gifcodecfl}"
+CFL_TUNNEL_STATE_FILE="${CFL_TUNNEL_STATE_FILE:-${CFL_ETC_DIR}/cloudflare.env}"
+CFL_TUNNEL_PID_FILE="${CFL_TUNNEL_PID_FILE:-${CFL_ETC_DIR}/cloudflared.pid}"
+CFL_TUNNEL_LOG_FILE="${CFL_TUNNEL_LOG_FILE:-${CFL_INSTALL_ROOT}/cloudflared.log}"
 
 log() { printf '[cfl] %s\n' "$*"; }
 warn() { printf '[cfl] warning: %s\n' "$*" >&2; }
@@ -64,6 +70,12 @@ export CFL_LOG_FILE="$CFL_LOG_FILE"
 export CFL_REPO_URL="$CFL_REPO_URL"
 export CFL_REPO_BRANCH="$CFL_REPO_BRANCH"
 export CFL_WAKE_LOCK_STATE="$CFL_WAKE_LOCK_STATE"
+export CFL_CLOUDFLARED_DIR="$CFL_CLOUDFLARED_DIR"
+export CFL_CLOUDFLARED_CONFIG="$CFL_CLOUDFLARED_CONFIG"
+export CFL_TUNNEL_NAME="$CFL_TUNNEL_NAME"
+export CFL_TUNNEL_STATE_FILE="$CFL_TUNNEL_STATE_FILE"
+export CFL_TUNNEL_PID_FILE="$CFL_TUNNEL_PID_FILE"
+export CFL_TUNNEL_LOG_FILE="$CFL_TUNNEL_LOG_FILE"
 EOF
 }
 load_profile_file() {
@@ -103,3 +115,74 @@ cmd_wake_lock() { require_termux; command -v termux-wake-lock >/dev/null 2>&1 ||
 cmd_wake_unlock() { require_termux; command -v termux-wake-unlock >/dev/null 2>&1 && termux-wake-unlock || true; rm -f "$CFL_WAKE_LOCK_STATE"; log 'wake-lock da tat'; }
 is_wake_locked() { [[ -f "$CFL_WAKE_LOCK_STATE" ]]; }
 get_local_ip() { command -v ip >/dev/null 2>&1 && ip -4 addr show 2>/dev/null | awk '/inet / && $2 !~ /^127\./ {sub(/\/.*/,"",$2); print $2; exit}'; }
+
+detect_termux_arch() {
+  case "$(uname -m)" in
+    aarch64|arm64) printf arm64;;
+    armv7l|armv7|armhf) printf arm;;
+    x86_64|amd64) printf amd64;;
+    i686|i386) printf 386;;
+    *) fail "khong ho tro kien truc: $(uname -m)";;
+  esac
+}
+cloudflared_bin() { printf '%s' "$PREFIX/bin/cloudflared"; }
+install_cloudflared() {
+  local bin url
+  bin="$(cloudflared_bin)"
+  [[ -x "$bin" ]] && return
+  ensure_binary curl
+  url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$(detect_termux_arch)"
+  log "tai cloudflared: $url"
+  curl -fsSL --retry 3 -o "${bin}.tmp" "$url" || { rm -f "${bin}.tmp"; fail 'tai cloudflared that bai'; }
+  mv "${bin}.tmp" "$bin"; chmod 755 "$bin"
+}
+tunnel_running() { [[ -s "$CFL_TUNNEL_PID_FILE" ]] && kill -0 "$(cat "$CFL_TUNNEL_PID_FILE")" 2>/dev/null; }
+start_tunnel() {
+  [[ -f "$CFL_CLOUDFLARED_CONFIG" ]] || fail 'chua cau hinh Cloudflare Tunnel'
+  tunnel_running && { log 'Cloudflare Tunnel dang chay'; return; }
+  local bin; bin="$(cloudflared_bin)"
+  [[ -x "$bin" ]] || install_cloudflared
+  nohup "$bin" tunnel --config "$CFL_CLOUDFLARED_CONFIG" --no-autoupdate run >> "$CFL_TUNNEL_LOG_FILE" 2>&1 &
+  printf '%s' "$!" > "$CFL_TUNNEL_PID_FILE"
+  sleep 1; tunnel_running || fail "Tunnel khong khoi dong; xem log $CFL_TUNNEL_LOG_FILE"
+  log "Cloudflare Tunnel da chay (PID $(cat "$CFL_TUNNEL_PID_FILE"))"
+}
+stop_tunnel() { if tunnel_running; then kill "$(cat "$CFL_TUNNEL_PID_FILE")" 2>/dev/null || true; fi; rm -f "$CFL_TUNNEL_PID_FILE"; log 'Cloudflare Tunnel da dung'; }
+current_domain() { read_env_value "$CFL_TUNNEL_STATE_FILE" CFL_DOMAIN 2>/dev/null || true; }
+configure_cloudflare_tunnel() {
+  local bin domain tunnel_id port
+  install_cloudflared; bin="$(cloudflared_bin)"
+  log 'Cloudflared se hien URL dang nhap. Mo URL tren browser, xac thuc Cloudflare, roi quay lai Termux.'
+  "$bin" tunnel login
+  domain="$(prompt_default 'Nhap domain expose (vd: cfl.example.com)' "$(current_domain)")"
+  [[ -n "$domain" ]] || fail 'domain khong duoc de trong'
+  if ! "$bin" tunnel info "$CFL_TUNNEL_NAME" >/dev/null 2>&1; then
+    log "tao tunnel $CFL_TUNNEL_NAME"
+    "$bin" tunnel create "$CFL_TUNNEL_NAME"
+  fi
+  tunnel_id="$("$bin" tunnel info "$CFL_TUNNEL_NAME" 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -n 1 || true)"
+  [[ -n "$tunnel_id" ]] || fail "khong lay duoc ID tunnel $CFL_TUNNEL_NAME"
+  "$bin" tunnel route dns "$CFL_TUNNEL_NAME" "$domain"
+  ensure_dir "$CFL_CLOUDFLARED_DIR"
+  port="$(get_listen_port)"
+  cat > "$CFL_CLOUDFLARED_CONFIG" <<EOF
+tunnel: $tunnel_id
+credentials-file: ${HOME}/.cloudflared/${tunnel_id}.json
+ingress:
+  - hostname: $domain
+    service: http://127.0.0.1${port}
+  - service: http_status:404
+EOF
+  printf 'CFL_DOMAIN=%s\nCFL_TUNNEL_ID=%s\n' "$domain" "$tunnel_id" > "$CFL_TUNNEL_STATE_FILE"
+  log "Tunnel da cau hinh cho https://$domain"
+  start_tunnel
+}
+remove_cloudflare_tunnel() {
+  local bin; stop_tunnel
+  if [[ -f "$CFL_TUNNEL_STATE_FILE" ]] && [[ -x "$(cloudflared_bin)" ]]; then
+    bin="$(cloudflared_bin)"
+    "$bin" tunnel delete "$CFL_TUNNEL_NAME" || warn 'khong xoa duoc tunnel tren Cloudflare'
+  fi
+  rm -f "$CFL_CLOUDFLARED_CONFIG" "$CFL_TUNNEL_STATE_FILE"
+  log 'da go cau hinh Cloudflare Tunnel'
+}

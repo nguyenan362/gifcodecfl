@@ -136,10 +136,28 @@ cfl
 cfl-install.sh --update
 cfl-install.sh --enable-service
 cfl-install.sh --disable-service
+cfl-install.sh --configure-tunnel
+cfl-install.sh --remove-tunnel
 cfl-install.sh --uninstall
 ```
 
 Android co the suspend Termux khi tat man hinh. Cai Termux:API tu F-Droid neu can app chay lien tuc, sau do chay `cfl-install.sh --wake-lock`. Mo lai Termux sau reboot de khoi dong app.
+
+### Cloudflare Tunnel
+
+Chon cau hinh Tunnel khi cai dat, hoac chay:
+
+```bash
+cfl-install.sh --configure-tunnel
+```
+
+Script tu tai `cloudflared` dung kien truc dien thoai, mo dang nhap Cloudflare, tao tunnel `gifcodecfl`, gan DNS va chay public URL. Can domain da quan ly tren Cloudflare. Termux hien URL dang nhap: copy URL, mo browser, xac thuc domain, roi quay lai Termux.
+
+Dung hoac mo lai tunnel trong menu muc 4. Go cau hinh va xoa tunnel tren Cloudflare:
+
+```bash
+cfl-install.sh --remove-tunnel
+```
 
 ## API nội bộ
 
