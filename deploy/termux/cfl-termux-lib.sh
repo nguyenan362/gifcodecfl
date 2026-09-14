@@ -116,32 +116,18 @@ cmd_wake_unlock() { require_termux; command -v termux-wake-unlock >/dev/null 2>&
 is_wake_locked() { [[ -f "$CFL_WAKE_LOCK_STATE" ]]; }
 get_local_ip() { command -v ip >/dev/null 2>&1 && ip -4 addr show 2>/dev/null | awk '/inet / && $2 !~ /^127\./ {sub(/\/.*/,"",$2); print $2; exit}'; }
 
-detect_termux_arch() {
-  case "$(uname -m)" in
-    aarch64|arm64) printf arm64;;
-    armv7l|armv7|armhf) printf arm;;
-    x86_64|amd64) printf amd64;;
-    i686|i386) printf 386;;
-    *) fail "khong ho tro kien truc: $(uname -m)";;
-  esac
-}
-cloudflared_bin() { printf '%s' "$PREFIX/bin/cloudflared"; }
+cloudflared_bin() { command -v cloudflared || true; }
 install_cloudflared() {
-  local bin url
-  bin="$(cloudflared_bin)"
-  [[ -x "$bin" ]] && return
-  ensure_binary curl
-  url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$(detect_termux_arch)"
-  log "tai cloudflared: $url"
-  curl -fsSL --retry 3 -o "${bin}.tmp" "$url" || { rm -f "${bin}.tmp"; fail 'tai cloudflared that bai'; }
-  mv "${bin}.tmp" "$bin"; chmod 755 "$bin"
+  log 'cai cap nhat cloudflared tu kho Termux'
+  pkg install -y cloudflared
+  command -v cloudflared >/dev/null 2>&1 || fail 'khong cai duoc cloudflared tu kho Termux'
 }
 tunnel_running() { [[ -s "$CFL_TUNNEL_PID_FILE" ]] && kill -0 "$(cat "$CFL_TUNNEL_PID_FILE")" 2>/dev/null; }
 start_tunnel() {
   [[ -f "$CFL_CLOUDFLARED_CONFIG" ]] || fail 'chua cau hinh Cloudflare Tunnel'
   tunnel_running && { log 'Cloudflare Tunnel dang chay'; return; }
   local bin; bin="$(cloudflared_bin)"
-  [[ -x "$bin" ]] || install_cloudflared
+  [[ -n "$bin" ]] || { install_cloudflared; bin="$(cloudflared_bin)"; }
   nohup "$bin" tunnel --config "$CFL_CLOUDFLARED_CONFIG" --no-autoupdate run >> "$CFL_TUNNEL_LOG_FILE" 2>&1 &
   printf '%s' "$!" > "$CFL_TUNNEL_PID_FILE"
   sleep 1; tunnel_running || fail "Tunnel khong khoi dong; xem log $CFL_TUNNEL_LOG_FILE"
@@ -179,7 +165,7 @@ EOF
 }
 remove_cloudflare_tunnel() {
   local bin; stop_tunnel
-  if [[ -f "$CFL_TUNNEL_STATE_FILE" ]] && [[ -x "$(cloudflared_bin)" ]]; then
+  if [[ -f "$CFL_TUNNEL_STATE_FILE" ]] && [[ -n "$(cloudflared_bin)" ]]; then
     bin="$(cloudflared_bin)"
     "$bin" tunnel delete "$CFL_TUNNEL_NAME" || warn 'khong xoa duoc tunnel tren Cloudflare'
   fi
